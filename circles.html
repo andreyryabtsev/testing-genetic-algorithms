@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<script>
+			var circles = [], population = [], totalFitness = 0, gens, bestSolution, bestEver, lastBest, noStreak=0, N = 1000, MUTATION_RATE = 0.1,
+				CROSSOVER_RATE = 0.5, REPEAT = false, lastTime;
+			function processKey(k){
+				if(k==13){//Start
+					REPEAT = l('cRepeat').checked;
+					circles=[];
+					for(var i = 0; i < 10; i++){
+						var r = Math.random() * 20 + 10, temp;
+						do{
+							temp = {x:r + Math.random() * (256 - r * 2), y:r + Math.random() * (256 - r * 2), r:r};
+						}while(distanceToClosest(temp.x,temp.y,temp.r) < 0);
+						circles.push(temp);
+					}
+					begin();
+				}
+			}
+			function begin(){
+				population=[];
+				noStreak = 0;
+				totalFitness = 0;
+				for(var i=0;i<N;i++){
+					var chromo = "", f;
+					for(var j = 0; j < 24; j++)chromo += Math.floor(Math.random()*2);
+					f = assignFitness(chromo);
+					totalFitness+=f;
+					population.push({genotype:chromo, fitness:f});
+				}
+				gens = 0;
+				lastTime=(new Date()).getTime();
+				advanceGeneration();
+			}
+			function advanceGeneration(){
+				getNewPopulation();
+				l('gens').innerHTML = ++gens;
+				l('ns').innerHTML = noStreak;
+				var newTime = (new Date()).getTime();
+				if(newTime - lastTime > 20){
+					drawStuff();
+					lastTime = newTime;
+				}
+				if(bestEver){
+					if(bestEver == lastBest)noStreak++;
+					else noStreak = 0;
+					if(noStreak>100 && REPEAT){
+						begin();
+						circles.push(evaluateChromosome(bestEver));
+						return;
+					}
+					lastBest=bestEver;
+				}
+				setTimeout(advanceGeneration,0);
+			}
+			function drawStuff(){
+				var canvas = l('cvs');
+				canvas.width=canvas.width;
+				var g = canvas.getContext('2d');
+				g.globalAlpha=1;
+				for(var i=0;i<circles.length;i++){
+					g.strokeStyle = i > 9 ? 'green' : 'black';
+					g.globalAlpha=1;
+					var c = circles[i];
+					g.beginPath();
+					g.moveTo(c.x + c.r, c.y);
+					g.arc(c.x,c.y,c.r,0,Math.PI * 2);
+					g.stroke();
+					if(i>9){
+						g.fillStyle='#004400';
+						g.globalAlpha=4/c.r;
+					}else{
+						g.globalAlpha=0;
+					}
+					g.fill();
+				}
+				g.strokeStyle='black';
+				g.fillStyle='red';
+				g.globalAlpha=1;
+				if(assignFitness(bestSolution) > assignFitness(bestEver))bestEver=bestSolution;
+				if(bestEver){
+					g.globalAlpha=0.5;
+					var bestCircle = evaluateChromosome(bestSolution);
+					g.beginPath();
+					g.arc(bestCircle.x,bestCircle.y,bestCircle.r,0,Math.PI*2);
+					g.fill();
+					g.fillStyle='blue';
+					bestCircle = evaluateChromosome(bestEver);
+					g.beginPath();
+					g.arc(bestCircle.x,bestCircle.y,bestCircle.r,0,Math.PI*2);
+					g.fill();
+				}
+			}
+			function getNewPopulation(){
+				var newPopulation = [], tf = 0, hf = -1;
+				for(var i = 0; i < N/2; i++){
+					var offsprings = [selectByFitness(), selectByFitness()];
+					if(Math.random() < CROSSOVER_RATE)offsprings = crossOver(offsprings[0], offsprings[1]);
+					for(var j = 0; j < 2; j++){
+						offsprings[j] = mutate(offsprings[j]);
+						var fitness = assignFitness(offsprings[j]);
+						newPopulation.push({genotype:offsprings[j], fitness:fitness});
+						tf += fitness;
+						if(fitness>hf){
+							hf=fitness;
+							bestSolution = offsprings[j];
+						}
+					}
+				}
+				population = newPopulation;
+				totalFitness=tf;
+			}
+			function selectByFitness(){
+				var value = Math.random() * totalFitness, checker = 0;
+				for(var i = 0; i < N; i++){
+					checker += population[i].fitness;
+					if(checker >= value)return population[i].genotype;
+				}
+			}
+			function mutate(chromo){
+				var newChromo = "";
+				for(var i = 0;i < chromo.length;i++)newChromo += (Math.random() < MUTATION_RATE)? (chromo.substr(i,1) == 1 ? 0 : 1) : chromo.substr(i,1);
+				return newChromo;
+			}
+			function crossOver(chromo1, chromo2){
+				var splitPoint = Math.floor(Math.random() * Math.min(chromo1.length, chromo2.length));
+				return [chromo1.substring(0,splitPoint)+chromo2.substring(splitPoint,chromo2.length), chromo2.substring(0,splitPoint)+chromo1.substring(splitPoint,chromo1.length)];
+			}
+
+			function assignFitness(chromo){
+				if (!chromo) return 0;
+				var circle = evaluateChromosome(chromo);
+				var d = distanceToClosest(circle.x,circle.y,circle.r);
+				return d < 0 ? 0 : circle.r;
+			}
+			function evaluateChromosome(chromo){
+				return {x:parseInt(chromo.substr(0,8),2), y:parseInt(chromo.substr(8,8),2), r:parseInt(chromo.substr(16,8),2)};
+			}
+			function distanceToClosest(x,y,r){
+				var lowestDistance = 256;
+				for(var i = 0; i <circles.length; i++){
+					var d = Math.sqrt(Math.pow(circles[i].x-x,2) + Math.pow(circles[i].y-y,2)) - r - circles[i].r;
+					if(d<lowestDistance)lowestDistance=d;
+				}
+				var d = Math.min(128 - Math.abs(128-x) - r, 128 - Math.abs(128-y) - r);
+				return Math.min(d, lowestDistance);
+			}
+			function load(){
+				document.addEventListener('keydown',function(e){processKey(e.keyCode);});
+			}
+			function l(id){
+				return document.getElementById(id);
+			}
+			load();
+		</script>
+	</head>
+	<body>
+		<canvas id='cvs' width=256 height=256 style='border-style:solid;'>JS off</canvas>
+		<div>Generations: <span id='gens'>0</span><br>
+		No change for: <span id='ns'>0</span> generations</div>
+		<input type='checkbox' id='cRepeat'></input> Try finding a new circle after 100 generations of no new solution.
+	</body>
+</html>

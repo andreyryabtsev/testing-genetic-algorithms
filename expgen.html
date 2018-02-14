@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<script>
+			window.onload = load;
+			var population, generations, solutionAt, started = false, DATA={toFind:10, GENES:9, MUTATION_RATE:0.02, CROSSOVER_RATE:0.6, N:100, MAX_GENERATIONS:1000, LN_MODE:false, WITH_OOP:true};
+			
+			function load(){
+				document.getElementById('rGenes').addEventListener('input', function(){document.getElementById('tGenes').innerHTML=document.getElementById('rGenes').value;});
+				document.getElementById('rMutation').addEventListener('input', function(){document.getElementById('tMutation').innerHTML=document.getElementById('rMutation').value + "%";});
+				document.getElementById('rCrossover').addEventListener('input', function(){document.getElementById('tCrossover').innerHTML=document.getElementById('rCrossover').value + "%";});
+				document.getElementById('rPopulation').addEventListener('input', function(){document.getElementById('tPopulation').innerHTML=document.getElementById('rPopulation').value;});
+			}
+			function button(){
+				started = !started;
+				document.getElementById('start').value = document.getElementById('start').value=="Start"?"Quit":"Start";
+				if(started)initiate();
+			}
+			function advanceGeneration(){
+				generations++;
+				population = getNewPopulation();
+				document.getElementById('generations').innerHTML = generations;
+				document.getElementById('highFitness').innerHTML = population.highestFitness;
+				if(population.bestSolution)document.getElementById('bestSolution').innerHTML = parseChromosome(population.bestSolution);
+				if(solutionAt>-1){
+					document.getElementById('solution').innerHTML = displayExpression(population.individuals[solutionAt].genotype);
+					document.getElementById('start').value="Start";
+					started = false;
+					return;
+				}
+				if(generations < DATA.MAX_GENERATIONS && started)setTimeout(advanceGeneration, 0);
+				else {
+					document.getElementById('start').value="Start";
+					started = false;
+				}
+			}
+			function initiate(){
+				DATA.GENES = document.getElementById('rGenes').value;
+				DATA.N = document.getElementById('rPopulation').value;
+				DATA.MUTATION_RATE = document.getElementById('rMutation').value/100;
+				DATA.CROSSOVER_RATE = document.getElementById('rCrossover').value/100;
+				DATA.MAX_GENERATIONS = parseInt(document.getElementById('fin').value);
+				DATA.toFind = parseFloat(document.getElementById('num').value);
+				if(isNaN(DATA.toFind))DATA.toFind=0;
+				DATA.LN_MODE=document.getElementById('cLog').checked;
+				DATA.WITH_OOP=document.getElementById('cOop').checked;
+			
+				solutionAt = -1;
+				generations = 0;
+				population = {individuals: [], totalFitness:0};
+				for(var i = 0; i < DATA.N; i++){
+					var chromo = "";
+					for(var j = 0; j < DATA.GENES * 4; j++)chromo += Math.floor(Math.random()*2);
+					var fitness = findFitness(chromo);
+					if(fitness=="correct")solutionAt=i;
+					population.totalFitness += fitness;
+					population.individuals.push({genotype:chromo, fitness:fitness});
+				}
+				document.getElementById('solution').innerHTML = "";
+				advanceGeneration();
+			}
+			function getNewPopulation(){
+				if(solutionAt>-1)return population;
+				var newPopulation = {individuals: [], totalFitness: 0, bestSolution:-1, highestFitness: 0};
+				for(var i = 0; i < DATA.N/2; i++){
+					var offsprings = [selectByFitness(), selectByFitness()];
+					if(Math.random() < DATA.CROSSOVER_RATE)offsprings = crossOver(offsprings[0], offsprings[1]);
+					for(var j = 0; j < 2; j++){
+						offsprings[j] = mutate(offsprings[j]);
+						var fitness = findFitness(offsprings[j]);
+						newPopulation.individuals.push({genotype:offsprings[j], fitness:fitness});
+						newPopulation.totalFitness += fitness;
+						if(fitness>newPopulation.highestFitness || fitness == "correct"){
+							newPopulation.highestFitness=fitness;
+							newPopulation.bestSolution = offsprings[j];
+						}
+						if(fitness == "correct")solutionAt = newPopulation.individuals.length-1;
+					}
+				}
+				return newPopulation;
+			}
+			function mutate(chromo){
+				var newChromo = "";
+				for(var i = 0;i < chromo.length;i++)newChromo += (Math.random()<DATA.MUTATION_RATE)? (chromo.substr(i,1) == 1 ? 0 : 1) : chromo.substr(i,1);
+				return newChromo;
+			}
+			function crossOver(chromo1, chromo2){
+				var splitPoint = Math.floor(Math.random() * Math.min(chromo1.length, chromo2.length));
+				return [chromo1.substring(0,splitPoint)+chromo2.substring(splitPoint,chromo2.length), chromo2.substring(0,splitPoint)+chromo1.substring(splitPoint,chromo1.length)];
+			}
+			function selectByFitness(){
+				var value = Math.random() * population.totalFitness, checker = 0;
+				for(var i = 0; i < DATA.N; i++){
+					checker += population.individuals[i].fitness;
+					if(checker >= value)return population.individuals[i].genotype;
+				}
+			}
+			function findFitness(chromo){//Evaluate the chromosome's effectiveness at solving the problem
+				if(typeof DATA.toFind == "undefined")alert("js confirmed retarded");
+				var answer = DATA.WITH_OOP?evaluateChromosomeWithOOP(chromo):evaluateChromosome(chromo);
+				var difference = Math.abs(DATA.toFind - answer), rf;
+				if(difference == 0){
+					rf = "correct";
+				}else{
+					rf = Math.min(1 / difference,1);
+					if(DATA.LN_MODE)return Math.max(0.001, 8 + Math.log10(rf));
+				}
+				return rf;
+			}
+			function displayExpression(chromo){//Remove symbols ignored by calculations and add spaces for visual presentation of the chromosome
+				return neatExpression(chromo) + " = " + (DATA.WITH_OOP?evaluateChromosomeWithOOP(chromo):evaluateChromosome(chromo));
+			}
+			function neatExpression(chromo){
+				var exp = parseChromosome(chromo), prevSign = false, result = "";
+				for(var i = 0; i < exp.length; i++){
+					var sym = exp.substr(i,1);
+					if(isNaN(sym)){
+						if(result.length>0){
+							if(prevSign)result = result.substr(0,result.length-2) + sym + " ";
+							else result+= " " + sym + " ";
+							prevSign = true;
+						}
+					}else{
+						result+=sym;
+						prevSign = false;
+						hasNumbers = true;
+					}
+				}
+				if(prevSign)result = result.substr(0,result.length-2);
+				return result;
+			}
+			function evaluateChromosomeWithOOP(chromo){
+				var r = eval(neatExpression(chromo));
+				if(!r)r=DATA.toFind-100000000000000000;
+				return r;
+			}
+			function evaluateChromosome(chromo){//Find the answer of the chromosome's expression
+				var n = 0, currentN = "", firstN = true, sign = false, expression = parseChromosome(chromo);
+				for(var i=0; i < expression.length; i++){
+					var sym = expression.substr(i,1);
+					if(isNaN(sym)){//Operant
+						if(firstN){
+							if(currentN){
+								firstN = false;
+								n=currentN;
+							}else continue;
+						}else if (currentN){
+							n=processOperation(n,sign,currentN);
+						}
+						sign = sym;
+						currentN="";
+					}else{//Number
+						currentN+=sym;
+					}
+				}
+				if(firstN)n=currentN;
+				else if(currentN) n=processOperation(n,sign,currentN);
+				return n;
+			}
+			function processOperation(a, operant, b){
+				var r = eval(a+operant+b);
+				if(typeof r != "undefined")return r;
+				return 10000000;
+			}
+			function getCharacterFromGene(gene){
+				var i = parseInt(gene,2);
+				return i<10 ? i : ["+", "-", "*", "/"][i-10];
+			}
+			function parseChromosome(chromo){
+				var r = "";
+				for(var i=0;i<Math.floor(chromo.length/4);i++){
+					gene = getCharacterFromGene(chromo.substr(4*i,4));
+					r += gene ? gene : "";
+				}
+				return r;
+			}
+		</script>
+	</head>
+	<body>
+		<p>The task is to construct a series of numbers and signs that, when evaluated, give the requested number. The algorithm simulates natural selection, using closeness of an attempted series to the actual number as the measure of fitness.</p>
+		<div>Generation: <span id='generations'>0</span>         Highest fitness: <span id='highFitness'>0</span>         Best solution: <span id='bestSolution'></span></div><br>
+		<div>Solution: <span style='font-size:26px;' id='solution'></span></div><br>
+		<input type='text' id='num' value='13'></input>
+		<input type='button' id='start' onclick = 'button();' value='Start'></input>
+		<br>
+		Max Symbols: <input type='range' id='rGenes'  style="width:300px;" min=3.0 max= 30.0 step=1 value=9></input>   <span id="tGenes">9</span><span style='font-variant:small-caps;'> [recommended 5-13]</span><br>
+		Mutation Rate: <input type='range' id='rMutation' style="width:300px;" min=0 max= 20 step=0.1 value=2></input>   <span id="tMutation">2%</span><span style='font-variant:small-caps;'> [recommended 1-4]</span><br>
+		Crossover Rate: <input type='range' id='rCrossover' style="width:300px;" min=0 max= 100 step=2 value=60></input>   <span id="tCrossover">60%</span><span style='font-variant:small-caps;'> [recommended 50-80]</span><br>
+		Population Size: <input type='range' id='rPopulation' style="width:300px;" min=8 max= 500 step=4 value=100></input>   <span id="tPopulation">100</span><span style='font-variant:small-caps;'> [recommended ~100]</span><br>
+		<input type='checkbox' id='cLog'></input> Logarithmic mode <span style='font-variant:small-caps;'> [recommended: off]</span><br>
+		<input type='checkbox' id='cOop' checked ></input> Use order of operations <br><br>
+		Stop attempting after <input type='text' id='fin' value='1000'></input> generations.<br><br><br>
+		Andrey Ryabtsev
+	</body>
+</html>
